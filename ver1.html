@@ -1,12 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
-<meta charset="UTF-8">
 <head>
-<title>My Copilot AI game</title>
-</head>
-<body>
-
-<h1>Copilot AI game goes here</h1>
+<meta charset="UTF-8">
+<title>Tic Tac Toe vs AI</title>
 <style>
     body {
         font-family: Arial, sans-serif;
@@ -54,11 +50,11 @@
 </head>
 <body>
 
-<h1>Tic Tac Toe</h1>
+<h1>Tic Tac Toe vs AI</h1>
 
 <div id="board"></div>
 
-<div id="status">Player X's turn</div>
+<div id="status">Your turn (X)</div>
 <button id="reset">Reset Game</button>
 
 <script>
@@ -67,13 +63,15 @@
     const resetBtn = document.getElementById("reset");
 
     let cells = ["", "", "", "", "", "", "", "", ""];
-    let currentPlayer = "X";
     let gameActive = true;
 
+    const HUMAN = "X";
+    const AI = "O";
+
     const winningCombos = [
-        [0,1,2], [3,4,5], [6,7,8], // rows
-        [0,3,6], [1,4,7], [2,5,8], // columns
-        [0,4,8], [2,4,6]           // diagonals
+        [0,1,2], [3,4,5], [6,7,8],
+        [0,3,6], [1,4,7], [2,5,8],
+        [0,4,8], [2,4,6]
     ];
 
     function createBoard() {
@@ -82,21 +80,29 @@
             const cell = document.createElement("div");
             cell.classList.add("cell");
             cell.dataset.index = index;
-            cell.addEventListener("click", handleCellClick);
+            cell.addEventListener("click", handleHumanMove);
             board.appendChild(cell);
         });
     }
 
-    function handleCellClick(e) {
+    function handleHumanMove(e) {
         const index = e.target.dataset.index;
 
         if (cells[index] !== "" || !gameActive) return;
 
-        cells[index] = currentPlayer;
-        e.target.textContent = currentPlayer;
+        makeMove(index, HUMAN);
 
-        if (checkWin()) {
-            statusText.textContent = `Player ${currentPlayer} wins!`;
+        if (!gameActive) return;
+
+        setTimeout(aiMove, 300); // slight delay for realism
+    }
+
+    function makeMove(index, player) {
+        cells[index] = player;
+        document.querySelector(`[data-index="${index}"]`).textContent = player;
+
+        if (checkWin(player)) {
+            statusText.textContent = `${player} wins!`;
             gameActive = false;
             return;
         }
@@ -107,33 +113,68 @@
             return;
         }
 
-        currentPlayer = currentPlayer === "X" ? "Y" : "X";
-        statusText.textContent = `Player ${currentPlayer}'s turn`;
+        statusText.textContent = player === HUMAN ? "AI thinking..." : "Your turn (X)";
     }
 
-    function checkWin() {
-        return winningCombos.some(combo => {
-            return combo.every(i => cells[i] === currentPlayer);
-        });
+    function aiMove() {
+        const bestIndex = minimax(cells, AI).index;
+        makeMove(bestIndex, AI);
+    }
+
+    function checkWin(player) {
+        return winningCombos.some(combo =>
+            combo.every(i => cells[i] === player)
+        );
+    }
+
+    function minimax(newBoard, player) {
+        const available = newBoard
+            .map((v, i) => v === "" ? i : null)
+            .filter(v => v !== null);
+
+        if (checkWin(HUMAN)) return { score: -10 };
+        if (checkWin(AI)) return { score: 10 };
+        if (available.length === 0) return { score: 0 };
+
+        const moves = [];
+
+        for (let i of available) {
+            const move = {};
+            move.index = i;
+            newBoard[i] = player;
+
+            if (player === AI) {
+                move.score = minimax(newBoard, HUMAN).score;
+            } else {
+                move.score = minimax(newBoard, AI).score;
+            }
+
+            newBoard[i] = "";
+            moves.push(move);
+        }
+
+        let bestMove;
+        if (player === AI) {
+            bestMove = moves.reduce((best, m) => m.score > best.score ? m : best);
+        } else {
+            bestMove = moves.reduce((best, m) => m.score < best.score ? m : best);
+        }
+
+        return bestMove;
     }
 
     resetBtn.addEventListener("click", () => {
         cells = ["", "", "", "", "", "", "", "", ""];
-        currentPlayer = "X";
         gameActive = true;
-        statusText.textContent = "Player X's turn";
+        statusText.textContent = "Your turn (X)";
         createBoard();
     });
 
     createBoard();
 </script>
-<br>
+<a href="index.html">Original Copilot version</a>
 <a href="game2.html">Original Chat GPT version</a>
-<a href="ver1.html">New Copilot version</a>
 <a href="ver2.html">New Chat GPT version</a>
 
-<script src="game.js"></script>
 </body>
 </html>
-
-
