@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>3D Tic-Tac-Toe</title>
+
+  <style>
+    body {
+      margin: 0;
+      background: #0f172a;
+      color: white;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    #ui {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+    }
+
+    #status {
+      margin-bottom: 10px;
+      font-size: 18px;
+    }
+
+    button {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      background: #22c55e;
+      color: white;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    button:hover {
+      background: #16a34a;
+    }
+
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+<div id="ui">
+  <h1>3D Tic-Tac-Toe</h1>
+  <div id="status">Your turn (Blue)</div>
+  <button onclick="restartGame()">Restart</button>
+</div>
+
+<script type="module">
+
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js";
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0f172a);
+
+const camera = new THREE.PerspectiveCamera(
+  70,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  1000
+);
+
+camera.position.set(4, 6, 9);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const light = new THREE.DirectionalLight(0xffffff, 2);
+light.position.set(5, 10, 7);
+scene.add(light);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+const LEVELS = 3;
+const SIZE = 3;
+
+const board = [];
+const cells = [];
+
+const HUMAN = "X";
+const AI = "O";
+
+let currentPlayer = HUMAN;
+let gameActive = true;
+
+const statusText = document.getElementById("status");
+
+const emptyMaterial = new THREE.MeshStandardMaterial({
+  color: 0x334155,
+  transparent: true,
+  opacity: 0.9
+});
+
+const humanMaterial = new THREE.MeshStandardMaterial({
+  color: 0x3b82f6
+});
+
+const aiMaterial = new THREE.MeshStandardMaterial({
+  color: 0xef4444
+});
+
+createBoard();
+
+function createBoard() {
+
+  for (let z = 0; z < LEVELS; z++) {
+
+    board[z] = [];
+
+    for (let y = 0; y < SIZE; y++) {
+
+      board[z][y] = [];
+
+      for (let x = 0; x < SIZE; x++) {
+
+        board[z][y][x] = "";
+
+        const geometry = new THREE.BoxGeometry(0.9, 0.2, 0.9);
+
+        const cube = new THREE.Mesh(geometry, emptyMaterial.clone());
+
+        cube.position.set(
+          x - 1,
+          z * 1.2,
+          y - 1
+        );
+
+        cube.userData = { x, y, z };
+
+        scene.add(cube);
+
+        cells.push(cube);
+      }
+    }
+  }
+}
+
+window.addEventListener("click", onMouseClick);
+
+function onMouseClick(event) {
+
+  if (!gameActive || currentPlayer !== HUMAN) return;
+
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+
+  const intersects = raycaster.intersectObjects(cells);
+
+  if (intersects.length > 0) {
+
+    const cell = intersects[0].object;
+    const { x, y, z } = cell.userData;
+
+    if (board[z][y][x] !== "") return;
+
+    makeMove(cell, x, y, z, HUMAN);
+
+    if (gameActive) {
+
+      currentPlayer = AI;
+      statusText.textContent = "AI thinking...";
+
+      setTimeout(aiMove, 500);
+    }
+  }
+}
+
+function makeMove(cell, x, y, z, player) {
+
+  board[z][y][x] = player;
+
+  cell.material = player === HUMAN
+    ? humanMaterial
+    : aiMaterial;
+
+  if (checkWinner(player)) {
+
+    statusText.textContent =
+      player === HUMAN
+      ? "You Win!"
+      : "AI Wins!";
+
+    gameActive = false;
+    return;
+  }
+
+  if (isBoardFull()) {
+
+    statusText.textContent = "Draw!";
+    gameActive = false;
+  }
+}
+
+function aiMove() {
+
+  const moves = [];
+
+  for (let z = 0; z < LEVELS; z++) {
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+
+        if (board[z][y][x] === "") {
+          moves.push({ x, y, z });
+        }
+      }
+    }
+  }
+
+  if (moves.length === 0) return;
+
+  const move = moves[Math.floor(Math.random() * moves.length)];
+
+  const cell = cells.find(c =>
+    c.userData.x === move.x &&
+    c.userData.y === move.y &&
+    c.userData.z === move.z
+  );
+
+  makeMove(cell, move.x, move.y, move.z, AI);
+
+  if (gameActive) {
+
+    currentPlayer = HUMAN;
+    statusText.textContent = "Your turn (Blue)";
+  }
+}
+
+function isBoardFull() {
+
+  for (let z = 0; z < LEVELS; z++) {
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+
+        if (board[z][y][x] === "") {
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
+function checkWinner(player) {
+
+  // Check rows/cols on each level
+
+  for (let z = 0; z < LEVELS; z++) {
+
+    for (let i = 0; i < SIZE; i++) {
+
+      // Rows
+      if (
+        board[z][i][0] === player &&
+        board[z][i][1] === player &&
+        board[z][i][2] === player
+      ) return true;
+
+      // Columns
+      if (
+        board[z][0][i] === player &&
+        board[z][1][i] === player &&
+        board[z][2][i] === player
+      ) return true;
+    }
+
+    // Diagonals
+    if (
+      board[z][0][0] === player &&
+      board[z][1][1] === player &&
+      board[z][2][2] === player
+    ) return true;
+
+    if (
+      board[z][0][2] === player &&
+      board[z][1][1] === player &&
+      board[z][2][0] === player
+    ) return true;
+  }
+
+  // Vertical wins
+
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+
+      if (
+        board[0][y][x] === player &&
+        board[1][y][x] === player &&
+        board[2][y][x] === player
+      ) return true;
+    }
+  }
+
+  return false;
+}
+
+function restartGame() {
+
+  for (let z = 0; z < LEVELS; z++) {
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+
+        board[z][y][x] = "";
+      }
+    }
+  }
+
+  cells.forEach(cell => {
+    cell.material = emptyMaterial.clone();
+  });
+
+  gameActive = true;
+  currentPlayer = HUMAN;
+
+  statusText.textContent = "Your turn (Blue)";
+}
+
+function animate() {
+
+  requestAnimationFrame(animate);
+
+  scene.rotation.y += 0.002;
+
+  renderer.render(scene, camera);
+}
+
+animate();
+
+window.addEventListener("resize", () => {
+
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+</script>
+
+<a href="index.html">Original Copilot version</a>
+<a href="game2.html">Original Chat GPT version</a>
+<a href="ver1.html">New Copilot version</a>
+<a href="ver2.html">New Chat GPT version</a>
+<a href="3dver1.html">3D Copilot version</a>
+
+</body>
+</html>
