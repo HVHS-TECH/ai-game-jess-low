@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>3D Tic Tac Toe (3×3×3)</title>
+<title>3D Tic Tac Toe (Movable Camera)</title>
 <style>
     body {
         font-family: Arial, sans-serif;
@@ -11,51 +11,67 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        margin: 0;
         padding: 20px;
     }
 
-    h1 {
-        margin-bottom: 10px;
-    }
+    h1 { margin-bottom: 5px; }
+    #info { margin-bottom: 15px; color: #ccc; }
 
-    #levels-container {
-        display: flex;
-        gap: 20px;
+    /* CAMERA WRAPPER */
+    #camera {
+        width: 320px;
+        height: 320px;
+        perspective: 900px;
+        cursor: grab;
         margin-top: 20px;
     }
+    #camera:active { cursor: grabbing; }
 
+    /* 3D BOARD CONTAINER */
+    #levels-container {
+        width: 320px;
+        height: 320px;
+        position: relative;
+        transform-style: preserve-3d;
+        transition: transform 0.1s linear;
+    }
+
+    /* LEVELS */
     .level {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 320px;
+        height: 320px;
         display: grid;
-        grid-template-columns: repeat(3, 60px);
-        grid-template-rows: repeat(3, 60px);
-        gap: 5px;
+        grid-template-columns: repeat(3, 80px);
+        grid-template-rows: repeat(3, 80px);
+        gap: 10px;
         padding: 10px;
-        border-radius: 8px;
-        background: #222;
+        background: rgba(34,34,34,0.95);
+        border-radius: 10px;
         box-shadow: 0 0 10px rgba(0,0,0,0.6);
+        transform-style: preserve-3d;
     }
 
-    .level-title {
-        text-align: center;
-        margin-top: 5px;
-        font-size: 0.9rem;
-        color: #aaa;
-    }
+    /* STACK SPACING */
+    .level0 { transform: translateZ(-120px); }
+    .level1 { transform: translateZ(0px); }
+    .level2 { transform: translateZ(120px); }
 
+    /* CELLS */
     .cell {
-        width: 60px;
-        height: 60px;
+        width: 80px;
+        height: 80px;
         background: #333;
         border-radius: 6px;
         display: flex;
         justify-content: center;
         align-items: center;
-        font-size: 2rem;
+        font-size: 2.2rem;
         cursor: pointer;
         transition: background 0.2s, transform 0.1s;
     }
-
     .cell:hover {
         background: #444;
         transform: translateY(-2px);
@@ -70,158 +86,216 @@
     #reset {
         margin-top: 10px;
         padding: 8px 16px;
-        font-size: 1rem;
-        cursor: pointer;
-        border-radius: 6px;
-        border: none;
         background: #4caf50;
+        border: none;
+        border-radius: 6px;
         color: white;
-    }
-
-    #reset:hover {
-        background: #43a047;
+        cursor: pointer;
     }
 </style>
 </head>
 <body>
 
-<h1>3D Tic Tac Toe (3×3×3)</h1>
-<div>Levels: bottom (0), middle (1), top (2)</div>
+<h1>3D Tic Tac Toe</h1>
+<div id="info">Click and drag to rotate the camera. You are X. AI is O.</div>
 
-<div id="levels-container"></div>
+<div id="camera">
+    <div id="levels-container"></div>
+</div>
 
-<div id="status">Player X's turn</div>
+<div id="status">Your turn (X)</div>
 <button id="reset">Reset Game</button>
 
 <script>
-    const levelsContainer = document.getElementById("levels-container");
-    const statusText = document.getElementById("status");
-    const resetBtn = document.getElementById("reset");
+/* ---------------- BASIC SETUP ---------------- */
+const SIZE = 3;
+const TOTAL = SIZE ** 3;
+let board = Array(TOTAL).fill("");
+let gameActive = true;
 
-    const SIZE = 3;          // 3×3×3
-    const TOTAL = SIZE**3;   // 27 cells
-    let board = Array(TOTAL).fill("");
-    let currentPlayer = "X";
-    let gameActive = true;
-    let winningLines = [];
+const HUMAN = "X";
+const AI = "O";
 
-    function index(x, y, z) {
-        return z * SIZE * SIZE + y * SIZE + x;
-    }
+let winningLines = [];
 
-    function createBoardUI() {
-        levelsContainer.innerHTML = "";
-        for (let z = 0; z < SIZE; z++) {
-            const levelWrapper = document.createElement("div");
-            const level = document.createElement("div");
-            level.classList.add("level");
-            levelWrapper.appendChild(level);
+const camera = document.getElementById("camera");
+const container = document.getElementById("levels-container");
+const statusText = document.getElementById("status");
 
-            for (let y = 0; y < SIZE; y++) {
-                for (let x = 0; x < SIZE; x++) {
-                    const cell = document.createElement("div");
-                    cell.classList.add("cell");
-                    const idx = index(x, y, z);
-                    cell.dataset.index = idx;
-                    cell.addEventListener("click", handleCellClick);
-                    level.appendChild(cell);
-                }
-            }
+/* ---------------- CAMERA CONTROL ---------------- */
+let camX = 35;   // tilt downward
+let camY = 0;    // rotate left-right
+let dragging = false;
+let lastX = 0;
 
-            const title = document.createElement("div");
-            title.classList.add("level-title");
-            title.textContent = `Level ${z}`;
-            levelWrapper.appendChild(title);
+camera.addEventListener("mousedown", e => {
+    dragging = true;
+    lastX = e.clientX;
+});
 
-            levelsContainer.appendChild(levelWrapper);
-        }
-    }
+document.addEventListener("mouseup", () => dragging = false);
 
-    function generateWinningLines() {
-        const lines = [];
+document.addEventListener("mousemove", e => {
+    if (!dragging) return;
+    const dx = e.clientX - lastX;
+    lastX = e.clientX;
+    camY += dx * 0.4;
+    updateCamera();
+});
 
-        // Rows and columns on each level
-        for (let z = 0; z < SIZE; z++) {
-            for (let y = 0; y < SIZE; y++) {
-                lines.push([0,1,2].map(x => index(x, y, z))); // rows
-            }
-            for (let x = 0; x < SIZE; x++) {
-                lines.push([0,1,2].map(y => index(x, y, z))); // columns
-            }
-            // Diagonals on each level
-            lines.push([0,1,2].map(i => index(i, i, z)));
-            lines.push([0,1,2].map(i => index(2 - i, i, z)));
-        }
+function updateCamera() {
+    container.style.transform = `rotateX(${camX}deg) rotateY(${camY}deg)`;
+}
 
-        // Vertical lines (through levels)
-        for (let x = 0; x < SIZE; x++) {
-            for (let y = 0; y < SIZE; y++) {
-                lines.push([0,1,2].map(z => index(x, y, z)));
-            }
-        }
+/* ---------------- BOARD CREATION ---------------- */
+function index(x, y, z) {
+    return z * 9 + y * 3 + x;
+}
 
-        // Vertical diagonals in planes parallel to YZ (x fixed)
-        for (let x = 0; x < SIZE; x++) {
-            lines.push([0,1,2].map(i => index(x, i, i)));
-            lines.push([0,1,2].map(i => index(x, 2 - i, i)));
-        }
+function createBoardUI() {
+    container.innerHTML = "";
 
-        // Vertical diagonals in planes parallel to XZ (y fixed)
+    for (let z = 0; z < SIZE; z++) {
+        const level = document.createElement("div");
+        level.classList.add("level", `level${z}`);
+
         for (let y = 0; y < SIZE; y++) {
-            lines.push([0,1,2].map(i => index(i, y, i)));
-            lines.push([0,1,2].map(i => index(2 - i, y, i)));
+            for (let x = 0; x < SIZE; x++) {
+                const cell = document.createElement("div");
+                cell.classList.add("cell");
+                const idx = index(x, y, z);
+                cell.dataset.index = idx;
+                cell.addEventListener("click", handleHumanMove);
+                level.appendChild(cell);
+            }
         }
+        container.appendChild(level);
+    }
+}
 
-        // 4 main space diagonals
-        lines.push([0,1,2].map(i => index(i, i, i)));
-        lines.push([0,1,2].map(i => index(2 - i, i, i)));
-        lines.push([0,1,2].map(i => index(i, 2 - i, i)));
-        lines.push([0,1,2].map(i => index(2 - i, 2 - i, i)));
+/* ---------------- WINNING LINES ---------------- */
+function generateWinningLines() {
+    const lines = [];
 
-        winningLines = lines;
+    // Rows, columns, diagonals per level
+    for (let z = 0; z < SIZE; z++) {
+        for (let y = 0; y < SIZE; y++)
+            lines.push([0,1,2].map(x => index(x, y, z)));
+
+        for (let x = 0; x < SIZE; x++)
+            lines.push([0,1,2].map(y => index(x, y, z)));
+
+        lines.push([0,1,2].map(i => index(i, i, z)));
+        lines.push([0,1,2].map(i => index(2-i, i, z)));
     }
 
-    function handleCellClick(e) {
-        if (!gameActive) return;
-        const idx = parseInt(e.target.dataset.index, 10);
-        if (board[idx] !== "") return;
+    // Vertical lines
+    for (let x = 0; x < SIZE; x++)
+        for (let y = 0; y < SIZE; y++)
+            lines.push([0,1,2].map(z => index(x, y, z)));
 
-        board[idx] = currentPlayer;
-        e.target.textContent = currentPlayer;
+    // Space diagonals
+    lines.push([0,1,2].map(i => index(i, i, i)));
+    lines.push([0,1,2].map(i => index(2-i, i, i)));
+    lines.push([0,1,2].map(i => index(i, 2-i, i)));
+    lines.push([0,1,2].map(i => index(2-i, 2-i, i)));
 
-        if (checkWin(currentPlayer)) {
-            statusText.textContent = `Player ${currentPlayer} wins!`;
-            gameActive = false;
+    winningLines = lines;
+}
+
+/* ---------------- GAME LOGIC ---------------- */
+function handleHumanMove(e) {
+    if (!gameActive) return;
+
+    const idx = parseInt(e.target.dataset.index);
+    if (board[idx] !== "") return;
+
+    makeMove(idx, HUMAN);
+
+    if (!gameActive) return;
+
+    statusText.textContent = "AI thinking...";
+    setTimeout(aiMove, 300);
+}
+
+function makeMove(idx, player) {
+    board[idx] = player;
+    document.querySelector(`.cell[data-index="${idx}"]`).textContent = player;
+
+    if (checkWin(player)) {
+        statusText.textContent = player === HUMAN ? "You win!" : "AI wins!";
+        gameActive = false;
+        return;
+    }
+
+    if (board.every(c => c !== "")) {
+        statusText.textContent = "Draw!";
+        gameActive = false;
+        return;
+    }
+
+    if (player === AI) statusText.textContent = "Your turn (X)";
+}
+
+function checkWin(player) {
+    return winningLines.some(line =>
+        line.every(i => board[i] === player)
+    );
+}
+
+function getAvailableMoves() {
+    return board.map((v, i) => v === "" ? i : null).filter(v => v !== null);
+}
+
+/* ---------------- DUMB AI ---------------- */
+/* AI behavior:
+   1. 30% chance: random move
+   2. Try to block human win
+   3. Otherwise random
+*/
+function aiMove() {
+    if (!gameActive) return;
+
+    const available = getAvailableMoves();
+
+    // 30% pure random
+    if (Math.random() < 0.3) {
+        const r = available[Math.floor(Math.random() * available.length)];
+        makeMove(r, AI);
+        return;
+    }
+
+    // Try to block human
+    for (const idx of available) {
+        board[idx] = HUMAN;
+        if (checkWin(HUMAN)) {
+            board[idx] = "";
+            makeMove(idx, AI);
             return;
         }
-
-        if (board.every(c => c !== "")) {
-            statusText.textContent = "It's a draw!";
-            gameActive = false;
-            return;
-        }
-
-        currentPlayer = currentPlayer === "X" ? "O" : "X";
-        statusText.textContent = `Player ${currentPlayer}'s turn`;
+        board[idx] = "";
     }
 
-    function checkWin(player) {
-        return winningLines.some(line =>
-            line.every(idx => board[idx] === player)
-        );
-    }
+    // Otherwise random
+    const r = available[Math.floor(Math.random() * available.length)];
+    makeMove(r, AI);
+}
 
-    resetBtn.addEventListener("click", () => {
-        board = Array(TOTAL).fill("");
-        currentPlayer = "X";
-        gameActive = true;
-        statusText.textContent = "Player X's turn";
-        createBoardUI();
-    });
-
-    generateWinningLines();
+/* ---------------- RESET ---------------- */
+document.getElementById("reset").addEventListener("click", () => {
+    board = Array(TOTAL).fill("");
+    gameActive = true;
+    statusText.textContent = "Your turn (X)";
     createBoardUI();
+});
+
+/* ---------------- INIT ---------------- */
+generateWinningLines();
+createBoardUI();
+updateCamera();
 </script>
+
+
 
 <a href="index.html">Original Copilot version</a>
 <a href="game2.html">Original Chat GPT version</a>

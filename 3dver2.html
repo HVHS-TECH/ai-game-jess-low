@@ -71,7 +71,8 @@ const camera = new THREE.PerspectiveCamera(
   1000
 );
 
-camera.position.set(4, 6, 9);
+camera.position.set(4, 8, 9);
+camera.lookAt(0, 1.5, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -310,13 +311,11 @@ function checkWinner(player) {
 
   return false;
 }
-
 function restartGame() {
 
   for (let z = 0; z < LEVELS; z++) {
     for (let y = 0; y < SIZE; y++) {
       for (let x = 0; x < SIZE; x++) {
-
         board[z][y][x] = "";
       }
     }
@@ -331,6 +330,18 @@ function restartGame() {
 
   statusText.textContent = "Your turn (Blue)";
 }
+
+window.restartGame = restartGame;
+
+  cells.forEach(cell => {
+    cell.material = emptyMaterial.clone();
+  });
+
+  gameActive = true;
+  currentPlayer = HUMAN;
+
+  statusText.textContent = "Your turn (Blue)";
+
 
 function animate() {
 
